@@ -1,0 +1,7 @@
+{
+  "name": "Impera Bank",
+  "description": "Outbound voice agent for sales and support—calling customers with multilingual support (English, Hindi, Marathi). Full call journey: greeting, consent, need discovery, qualification, offer, objection handling, next steps, closure.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
