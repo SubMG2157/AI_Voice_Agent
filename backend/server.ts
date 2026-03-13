@@ -35,7 +35,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // Initialize file logger — all console output goes to logs/logs.txt
 initFileLogger();
 
-const PORT = Number(process.env.BACKEND_PORT) || 3001;
+const PORT = Number(process.env.PORT) || Number(process.env.BACKEND_PORT) || 3001;
 const BASE_URL = process.env.BACKEND_BASE_URL || `http://localhost:${PORT}`;
 const plivoOk = !!(process.env.PLIVO_AUTH_ID && process.env.PLIVO_AUTH_TOKEN && process.env.PLIVO_NUMBER);
 console.log('Plivo:', plivoOk ? 'LOADED' : 'MISSING (set PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, PLIVO_NUMBER in .env or backend/.env)');
