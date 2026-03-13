@@ -1,0 +1,41 @@
+# Deepak Fertilisers AI Agent — Runtime Logs
+# Started: 2026-03-13T17:22:11.300Z
+────────────────────────────────────────────────────────────
+
+[2026-03-13T17:22:11.304Z] [INFO] File logger initialized → logs/logs.txt
+[2026-03-13T17:22:11.304Z] [INFO] Plivo: LOADED
+[2026-03-13T17:22:11.322Z] [INFO] 
+🚀 Deepak Fertilisers Agent — Running on port 3001
+[2026-03-13T17:22:11.323Z] [INFO] ──────────────────────────────────────────
+[2026-03-13T17:22:11.324Z] [INFO]   🌐 Frontend:  http://localhost:3001
+[2026-03-13T17:22:11.324Z] [INFO]   📡 API:       http://localhost:3001/api/...
+[2026-03-13T17:22:11.325Z] [INFO]   📞 Plivo:     https://2cbe-36-255-182-237.ngrok-free.app/plivo/answer
+[2026-03-13T17:22:11.325Z] [INFO]   🔗 ngrok URL: https://2cbe-36-255-182-237.ngrok-free.app
+[2026-03-13T17:22:11.325Z] [INFO] ──────────────────────────────────────────
+[2026-03-13T17:22:11.326Z] [INFO]   Share this with customers: https://2cbe-36-255-182-237.ngrok-free.app
+[2026-03-13T17:22:11.326Z] [INFO] ──────────────────────────────────────────
+
+[2026-03-13T17:22:16.874Z] [INFO] CALL API HIT {
+  "phone": "+919975711324",
+  "name": "Mayur",
+  "lastProduct": "NPK 19-19-19",
+  "language": "Marathi",
+  "agentGender": "male"
+}
+[2026-03-13T17:22:23.973Z] [INFO] [MediaStream] WS /media connected, extensions: (none)
+[2026-03-13T17:22:23.974Z] [INFO] [MediaStream] New WebSocket connection, callId: 4e070fc1-decf-4154-af0b-3ff80bb3cf21 req.url: /media?callUuid=4e070fc1-decf-4154-af0b-3ff80bb3cf21
+[2026-03-13T17:22:23.976Z] [INFO] [MediaStream] Agent voice: Puck
+[2026-03-13T17:22:24.133Z] [INFO] [MediaStream] Gemini model: gemini-2.5-flash-native-audio-preview-09-2025
+[2026-03-13T17:22:24.138Z] [INFO] [MediaStream] Hold stream started (20 ms frames, streamSid: 5463f0b7-c3aa-4b29-9814-f997288ab38a )
+[2026-03-13T17:22:24.164Z] [INFO] [MediaStream] First hold frame sent, streamSid: 5463f0b7-c3aa-4b29-9814-f997288ab38a
+[2026-03-13T17:22:24.228Z] [INFO] [MediaStream] Gemini WebSocket opened
+[2026-03-13T17:22:24.230Z] [INFO] [MediaStream] Gemini session connected successfully
+[2026-03-13T17:22:24.232Z] [INFO] [MediaStream] Greeting trigger sent
+[2026-03-13T17:22:25.648Z] [INFO] [MediaStream] Agent spoke first — enabling customer audio
+[2026-03-13T17:22:25.649Z] [INFO] [MediaStream] Hold audio stopped
+[2026-03-13T17:22:54.756Z] [INFO] [MediaStream] ⏱️ Customer→Agent latency: 1039ms
+[2026-03-13T17:23:00.036Z] [INFO] [MediaStream] ⏱️ Customer→Agent latency: 1722ms
+[2026-03-13T17:23:14.987Z] [INFO] [MediaStream] ⏱️ Customer→Agent latency: 1055ms
+[2026-03-13T17:23:18.676Z] [INFO] [MediaStream] ⏱️ Customer→Agent latency: 1016ms
+[2026-03-13T17:23:29.335Z] [INFO] [MediaStream] Client disconnected
+[2026-03-13T17:23:30.554Z] [INFO] [CallLog] 4e070fc1-decf-4154-af0b-3ff80bb3cf21 completed 66
