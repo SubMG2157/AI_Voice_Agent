@@ -424,6 +424,8 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
           if (custResult.output) {
             broadcastUiSync({ type: 'CUSTOMER_TURN', callId: state.callSid!, text: custResult.output });
             state.fullTranscript += '\nCUSTOMER: ' + custResult.output;
+          } else {
+            console.log('[MediaStream] Customer transcript dropped by sanitizer:', JSON.stringify(rawText.slice(0, 60)));
           }
         }
         state.customerBuffer = ''; // Reset buffer
@@ -446,6 +448,8 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         if (custResult.output) {
           broadcastUiSync({ type: 'CUSTOMER_TURN', callId: state.callSid!, text: custResult.output });
           state.fullTranscript += '\nCUSTOMER: ' + custResult.output;
+        } else {
+          console.log('[MediaStream] Customer transcript dropped by sanitizer (interrupted):', JSON.stringify(rawText.slice(0, 60)));
         }
         state.customerBuffer = '';
         if (state.silenceTimer) { clearTimeout(state.silenceTimer); state.silenceTimer = null; }

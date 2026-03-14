@@ -190,6 +190,15 @@ export function sanitizeTranscript(text: string, options: SanitizeOptions = {}):
     return { output: null, isUnclear: false };
   }
 
+  // Step 4.5: In Devanagari-preferred mode, drop pure Latin hallucinations
+  if (options.preferDevanagari) {
+    const hasDevanagari = /[\u0900-\u097F]/.test(cleaned);
+    if (!hasDevanagari) {
+      // Pure English/Latin in a Marathi call = ASR hallucination. Drop silently.
+      return { output: null, isUnclear: false };
+    }
+  }
+
   if (options.dropIsolatedLatinWords && shouldDropIsolatedLatin(cleaned)) {
     return { output: null, isUnclear: false };
   }
