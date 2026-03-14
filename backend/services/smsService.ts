@@ -57,7 +57,9 @@ export function generatePaymentLink(orderId: string): string {
  * Build the SMS body with all required fields:
  * Name, Phone, Address, Order details, Payment link, 24-hour deadline.
  */
-function buildSmsBody(payload: OrderSmsPayload): string {
+import { sendOrderSmsTwilio } from './twilioSmsService.ts';
+
+export function formatSmsBody(payload: OrderSmsPayload): string {
     const paymentLink = generatePaymentLink(payload.orderId);
     // Build address from clean structured fields — never use raw spoken text
     const addressParts = [payload.village, payload.taluka, payload.pinCode].filter(Boolean);
@@ -103,52 +105,6 @@ ${paymentLink}
  * Send order confirmation SMS to farmer.
  */
 export async function sendOrderSms(payload: OrderSmsPayload): Promise<{ success: boolean; sid?: string; error?: string }> {
-    const cfg = getPlivoConfig();
-    if (!cfg.authId || !cfg.authToken || !cfg.src) {
-        console.warn('[SMS] Plivo not configured — logging SMS body instead.');
-        const body = buildSmsBody(payload);
-        console.log(`[SMS Mock]\nTo: ${payload.phone}\n${body}`);
-        return { success: true, sid: 'MOCK_' + Date.now() };
-    }
-
-    try {
-        const body = buildSmsBody(payload);
-        const requestBody: Record<string, unknown> = {
-            src: cfg.src,
-            dst: normalizePhoneForPlivo(payload.phone),
-            text: body,
-            type: 'sms',
-        };
-
-        if (cfg.callbackUrl) {
-            requestBody.url = cfg.callbackUrl;
-            requestBody.method = 'POST';
-        }
-
-        // Optional DLT hints for India; ignored if account/route does not use them.
-        if (cfg.dltEntityId) requestBody.DLT_EntityId = cfg.dltEntityId;
-        if (cfg.dltTemplateId) requestBody.DLT_TemplateId = cfg.dltTemplateId;
-
-        const response = await fetch(`https://api.plivo.com/v1/Account/${encodeURIComponent(cfg.authId)}/Message/`, {
-            method: 'POST',
-            headers: {
-                Authorization: getPlivoAuthHeader(cfg.authId, cfg.authToken),
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-        });
-
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            const errMsg = typeof data?.error === 'string' ? data.error : JSON.stringify(data);
-            throw new Error(`Plivo SMS send failed (${response.status}): ${errMsg}`);
-        }
-
-        const sid = Array.isArray(data?.message_uuid) ? data.message_uuid[0] : undefined;
-        console.log(`[SMS] Sent to ${payload.phone}: ${sid ?? 'queued'}`);
-        return { success: true, sid };
-    } catch (err: any) {
-        console.error('[SMS] Failed:', err?.message);
-        return { success: false, error: err?.message ?? 'SMS send failed' };
-    }
+    // Use Twilio for SMS, Plivo handles calls separately
+    return sendOrderSmsTwilio(payload);
 }

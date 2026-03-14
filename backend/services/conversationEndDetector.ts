@@ -32,8 +32,7 @@ const CLOSING_PHRASES_ANYWHERE: RegExp[] = [
 
 /** Returns true only when the agent's turn is a closing line (end of conversation). */
 export function isAgentClosingLine(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  if (CLOSING_PHRASES_ANYWHERE.some((r) => r.test(t))) return true;
-  return CLOSING_PHRASES_END.some((r) => r.test(t));
+  const hasGoodbye = text.includes('शुभ जावो') || text.includes('काळजी घ्या');
+  const hasThanks = text.includes('धन्यवाद');
+  return hasGoodbye && hasThanks;
 }
