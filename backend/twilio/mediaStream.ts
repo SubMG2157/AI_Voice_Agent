@@ -141,6 +141,26 @@ function cleanAddressField(text: string): string {
     .trim();
 }
 
+function isRepetitionLoop(text: string): boolean {
+  if (text.length < 20) return false;
+  // Check if any 3+ character sequence repeats 4+ times consecutively
+  const words = text.split(/\s+/);
+  if (words.length < 6) return false;
+  
+  // Count consecutive duplicate words
+  let maxConsecutiveDupes = 1;
+  let currentDupes = 1;
+  for (let i = 1; i < words.length; i++) {
+    if (words[i] === words[i-1]) {
+      currentDupes++;
+      maxConsecutiveDupes = Math.max(maxConsecutiveDupes, currentDupes);
+    } else {
+      currentDupes = 1;
+    }
+  }
+  return maxConsecutiveDupes >= 4;
+}
+
 function getCallSidFromRequestUrl(req: import('http').IncomingMessage): string | null {
   try {
     const url = new URL(req.url ?? '', 'http://localhost');
@@ -455,8 +475,17 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         if (state.silenceTimer) { clearTimeout(state.silenceTimer); state.silenceTimer = null; }
       }
 
-      if (!state.agentBuffer) broadcastUiSync({ type: 'AGENT_SPEAKING', callId: state.callSid!, value: true });
       state.agentBuffer = joinTranscriptChunk(state.agentBuffer, outText);
+      
+      // Detect repetition loop and kill the session
+      if (isRepetitionLoop(state.agentBuffer) && state.callSid && !state.hangupScheduled) {
+        console.error('[MediaStream] Repetition loop detected, terminating call');
+        state.geminiSession?.close?.();
+        scheduleHangup(state.callSid);
+        return;
+      }
+      
+      if (!state.agentBuffer) broadcastUiSync({ type: 'AGENT_SPEAKING', callId: state.callSid!, value: true });
     }
 
     // Turn complete logic
@@ -615,10 +644,12 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
 
     // Safety: ensure we rely on the map in memory which updateContextItems modifies
     const sessionItems = ctx.items || new Map();
-    if (sessionItems.size === 0 && ctx.lastProduct) {
-      sessionItems.set(ctx.lastProduct, 1);
+    
+    // Only send if farmer actually ordered something during this call
+    if (sessionItems.size === 0) {
+      console.log('[MediaStream] No items ordered, skipping SMS');
+      return;
     }
-    if (sessionItems.size === 0) return;
 
     state.smsSent = true;
 
