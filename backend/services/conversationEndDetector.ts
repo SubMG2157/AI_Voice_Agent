@@ -32,7 +32,15 @@ const CLOSING_PHRASES_ANYWHERE: RegExp[] = [
 
 /** Returns true only when the agent's turn is a closing line (end of conversation). */
 export function isAgentClosingLine(text: string): boolean {
-  const hasGoodbye = text.includes('शुभ जावो') || text.includes('काळजी घ्या');
+  const hasShubhJavo = text.includes('शुभ जावो');
+  const hasKaljiGhya = text.includes('काळजी घ्या');
   const hasThanks = text.includes('धन्यवाद');
-  return hasGoodbye && hasThanks;
+
+  // Normal order closure: धन्यवाद + शुभ जावो (STEP 8)
+  if (hasShubhJavo && hasThanks) return true;
+
+  // Callback closure: काळजी घ्या + शुभ जावो (CALLBACK FLOW C2)
+  if (hasKaljiGhya && hasShubhJavo) return true;
+
+  return false;
 }
