@@ -509,6 +509,7 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
               // Extract product name from this chunk
               // Remove quantity and 'पिशव्या'
               let cleanName = chunk.replace(/(\d+|एक|दोन|तीन|चार|पाच)\s*पिशव.*/, '').trim();
+              cleanName = cleanName.replace(/^(ठीक|ठीक\s*\.|ठीक\s*आहे|बरोबर|हो|okay|ok)[.\s]*/gi, '').trim();
               cleanName = cleanName.replace(/AGENT:|बरोबर|आहे|का|order|confirmed/gi, '').trim();
 
               if (cleanName.length > 2) {
@@ -528,8 +529,8 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         }
 
         // Auto-send SMS
-        if (!state.smsSent && !state.locked && isSmsLine(agentText) && state.callSid && state.context) {
-          handleSmsSending(agentText);
+        if (!state.locked && isSmsLine(agentText)) {
+          lockOrder(agentText);
         }
 
         if (state.callSid && !state.hangupScheduled && isAgentClosingLine(agentText)) {
@@ -600,8 +601,15 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
     }, 1000);
   }
 
-  function handleSmsSending(agentText: string) {
-    const ctx = state.context!;
+  function lockOrder(agentText: string) {
+    if (state.smsSent || state.locked || !state.callSid || !state.context) return;
+    state.locked = true; // Lock items from changing
+    console.log('[MediaStream] Order locked, will send SMS at call end');
+  }
+
+  async function sendFinalSms() {
+    if (state.smsSent || !state.callSid || !state.context) return;
+    const ctx = state.context;
     // IMPORTANT: Re-read context to get latest items updated in this turn
     // (Though ctx is a reference, the items Map inside might have been updated)
 
@@ -610,26 +618,44 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
     if (sessionItems.size === 0 && ctx.lastProduct) {
       sessionItems.set(ctx.lastProduct, 1);
     }
+    if (sessionItems.size === 0) return;
+
+    state.smsSent = true;
 
     const orderItems = Array.from(sessionItems.entries()).map(([p, q]) => ({
       product: p, quantity: q, price: getProductPrice(p)
     }));
 
     // Log items for debugging
-    console.log('[MediaStream] SMS Items:', JSON.stringify(orderItems));
+    console.log('[MediaStream] Final SMS Items:', JSON.stringify(orderItems));
 
     const totalAmount = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     let village = '', taluka = '', pincode = '';
     const lines = state.fullTranscript.split('\n');
     for (const l of lines) {
-      if (l.includes('AGENT:') && l.includes('पत्ता:')) {
-        const pinMatch = l.match(/(\d{6})/);
-        if (pinMatch) pincode = pinMatch[1];
-        const villageMatch = l.match(/पत्ता:\s*(.+?)(?:,|\s*तालुका)/i);
-        if (villageMatch) village = cleanAddressField(villageMatch[1]);
-        const talukaMatch = l.match(/तालुका\s+(.+?)(?:\s*[-–]|,|\s*\d{6}|\s*\.|\s*हे)/i);
-        if (talukaMatch) taluka = cleanAddressField(talukaMatch[1]);
+      if (l.includes('AGENT:')) {
+        if (l.includes('पत्ता:')) {
+          const pinMatch = l.match(/(\d{6})/);
+          if (pinMatch) pincode = pinMatch[1];
+          const villageMatch = l.match(/पत्ता:\s*(.+?)(?:,|\s*तालुका)/i);
+          if (villageMatch) village = cleanAddressField(villageMatch[1]);
+          const talukaMatch = l.match(/तालुका\s+(.+?)(?:\s*[-–]|,|\s*\d{6}|\s*\.|\s*हे)/i);
+          if (talukaMatch) taluka = cleanAddressField(talukaMatch[1]);
+        }
+        
+        if (!pincode) {
+          const pinMatch = l.match(/(\d{6})/);
+          if (pinMatch) pincode = pinMatch[1];
+        }
+        if (!taluka) {
+          const talukaMatch = l.match(/तालुका\s+([^\s,]+)/i);
+          if (talukaMatch) taluka = cleanAddressField(talukaMatch[1]);
+        }
+        if (!village && taluka) {
+          const villageMatch = l.match(/([^\s,]+(?:\s+खुर्द|बुद्रुक)?)\s*,\s*तालुका/i);
+          if (villageMatch) village = cleanAddressField(villageMatch[1]);
+        }
       }
     }
 
@@ -703,6 +729,7 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         }
       } else if (msg.event === 'stop') {
         console.log('[MediaStream] Stop event');
+        sendFinalSms();
         flushInboundAudio();
         state.geminiSession = null;
         stopHoldLoop(state);
@@ -712,6 +739,7 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
 
   ws.on('close', () => {
     console.log('[MediaStream] Client disconnected');
+    sendFinalSms();
     flushInboundAudio();
     state.geminiSession = null;
     stopHoldLoop(state);

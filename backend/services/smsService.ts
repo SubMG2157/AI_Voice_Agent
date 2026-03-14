@@ -46,60 +46,7 @@ export interface OrderSmsPayload {
     orderId: string;
 }
 
-/**
- * Generate a placeholder payment link (replace with real gateway in production).
- */
-export function generatePaymentLink(orderId: string): string {
-    return 'https://amrutpeth.com/product/mahadhan-smartek-102626';
-}
-
-/**
- * Build the SMS body with all required fields:
- * Name, Phone, Address, Order details, Payment link, 24-hour deadline.
- */
-import { sendOrderSmsTwilio } from './twilioSmsService.ts';
-
-export function formatSmsBody(payload: OrderSmsPayload): string {
-    const paymentLink = generatePaymentLink(payload.orderId);
-    // Build address from clean structured fields — never use raw spoken text
-    const addressParts = [payload.village, payload.taluka, payload.pinCode].filter(Boolean);
-    const fullAddress = addressParts.length > 0
-        ? addressParts.join(', ')
-        : payload.address || 'पत्ता उपलब्ध नाही';
-
-    let itemsText = "";
-    payload.items.forEach(item => {
-        const lineTotal = item.price * item.quantity;
-        itemsText += `
-${item.product} – ${item.quantity} पिशव्या
-दर: ₹${item.price} प्रति पिशवी
-उपएकूण: ₹${lineTotal}
-`;
-    });
-
-    return `नमस्कार ${payload.customerName}जी,
-
-आपला ऑर्डर तपशील:
-
-नाव: ${payload.customerName}
-मोबाईल: ${payload.phone}
-पत्ता: ${fullAddress}
-
-उत्पादन तपशील:
-${itemsText}
-
-एकूण रक्कम: ₹${payload.totalAmount} (किंमत GST सहित)
-
-ऑर्डर क्र.: ${payload.orderId}
-
-पेमेंट लिंक:
-${paymentLink}
-
-कृपया 24 तासांच्या आत पेमेंट करा.
-पेमेंट झाल्यानंतर 3-4 दिवसांत डिलिव्हरी होईल.
-
-धन्यवाद – दीपक फर्टिलायझर्स 🌾`;
-}
+import { sendOrderSmsTwilio } from './twilioSmsService.js';
 
 /**
  * Send order confirmation SMS to farmer.
