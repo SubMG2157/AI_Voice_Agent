@@ -4,9 +4,9 @@
  * No duplicate logic, no prompt drift.
  */
 
-import type { Language, AgentGender } from '../types';
-import { getEndGreetingForAppLanguage } from '../endGreetings';
-import { buildSystemPrompt, getDeveloperPrompt } from './prompts';
+import type { Language, AgentGender } from '../../types.ts';
+import { getEndGreetingForAppLanguage } from '../endGreetings.ts';
+import { buildSystemPrompt, getDeveloperPrompt } from './prompts.ts';
 
 /**
  * Build full system instruction for Gemini Live (web or backend).
@@ -24,4 +24,4 @@ export function getSystemInstruction(
   return buildSystemPrompt(agentGender) + getDeveloperPrompt('Marathi', nameForGreeting, product, closingPhrase, agentGender);
 }
 
-export { buildSystemPrompt, getDeveloperPrompt, getAgentName } from './prompts';
+export { buildSystemPrompt, getDeveloperPrompt, getAgentName } from './prompts.ts';
