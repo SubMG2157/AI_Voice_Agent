@@ -22,7 +22,8 @@ import { handleTwilioStatus } from './twilio/statusHandler.js';
 import { handleMediaConnection, handleUiSyncConnection, setPendingStreamCallSid } from './twilio/mediaStream.js';
 import { setCallContext } from './twilio/callContext.js';
 import { saveOrder } from './orders/orderStore.js';
-import { sendOrderSms, generatePaymentLink } from './services/smsService.js';
+import { sendOrderSms } from './services/smsService.js';
+import { generatePaymentLink } from './services/smsFormatter.js';
 import { initFileLogger } from './services/fileLogger.js';
 
 // Load .env from project root and backend/
