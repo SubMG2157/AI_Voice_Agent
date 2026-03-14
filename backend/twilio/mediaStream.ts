@@ -325,7 +325,7 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
           outputAudioTranscription: {},
           realtimeInputConfig: {
             automaticActivityDetection: {
-              silenceDurationMs: 150,
+              silenceDurationMs: 500,
               prefixPaddingMs: 0,
               endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
             },
@@ -428,7 +428,7 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         }
         state.customerBuffer = ''; // Reset buffer
         state.silenceTimer = null;
-      }, 400);
+      }, 800);
     }
 
     // agent transcript
@@ -657,7 +657,13 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
           taluka,
           pinCode: pincode,
           orderId: order.orderId,
-        }).then(r => console.log('[SMS] Sent', r));
+        })
+          .then(r => console.log('[SMS] Sent', r))
+          .catch(e => {
+            console.error('[SMS] Send failed, unlocking for retry:', e);
+            state.smsSent = false;
+            state.locked = false;
+          });
       } catch (e) {
         console.error('[SMS] Error', e);
         state.smsSent = false;

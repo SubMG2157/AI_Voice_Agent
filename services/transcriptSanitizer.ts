@@ -185,8 +185,8 @@ export function sanitizeTranscript(text: string, options: SanitizeOptions = {}):
     return { output: null, isUnclear: false };
   }
 
-  // Step 4: too short (single char remnant)
-  if (cleaned.length < 2) {
+  // Step 4: too short (purely empty handled above, but just in case)
+  if (cleaned.length < 1) {
     return { output: null, isUnclear: false };
   }
 
@@ -207,7 +207,7 @@ export function sanitizeTranscript(text: string, options: SanitizeOptions = {}):
   }
 
   // Some text, but low confidence — show [unclear]
-  if (cleaned.length >= 2) {
+  if (cleaned.length >= 1) {
     return { output: '[unclear]', isUnclear: true };
   }
 

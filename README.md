@@ -65,15 +65,20 @@ PLIVO_NUMBER=+919876543210
 DLT_ENTITY_ID=1234567890123456
 DLT_TEMPLATE_ID=1234567890123456789
 GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx
-BACKEND_BASE_URL=https://xxxx.ngrok-free.app
-BACKEND_PORT=3001
+BACKEND_BASE_URL=https://xxxx.railway.app
+PORT=3001
 ```
 
 Notes:
 
-- `BACKEND_BASE_URL` must be public for Plivo, usually via ngrok.
+- `BACKEND_BASE_URL` must be public for Plivo, usually via Railway or ngrok.
+- `PORT` dictates the Express server's listening port (default is 3001 if omitted). Railway sets this automatically.
 - Vite injects `GEMINI_API_KEY` into browser demo mode during build/dev.
 - For Indian SMS, DLT entity/template configuration is required.
+
+## Node.js Requirement
+
+This project requires **Node.js v20.0.0 or higher** due to the `@google/genai` dependency and ESM resolution logic.
 
 ## Run Locally
 
@@ -104,6 +109,14 @@ ngrok http 3001
 ```
 
 Then update `BACKEND_BASE_URL` and restart the backend.
+
+## Railway Deployment
+
+The project contains a `railway.json` and a `.nixpacks.toml` configured for Railway deployment.
+
+1. Ensure all environment variables above are configured in Railway.
+2. Railway will automatically build using `npm run build` and start the server using `npx tsx backend/server.ts`.
+3. The Nixpacks configuration forces Node.js 20.
 
 ## Scripts
 

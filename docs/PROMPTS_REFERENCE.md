@@ -108,11 +108,12 @@ Interrupt phrases like these are treated specially:
 
 The agent is instructed to stop and respond with a listening acknowledgement.
 
-For unclear/noisy input, the prompt instructs the agent to:
+For unclear/noisy input or background voices not directed at the agent, the prompt strictly outlines:
 
-1. ask the farmer to repeat,
-2. if still unclear, mention network difficulty and suggest a later call,
-3. never invent missing content.
+1. **NO FILLER RESPONSES**: Do not say "बोला", "हो", or "हं" if it was just noise or background chitchat.
+2. Complete your current sentence or repeat your last question instead of producing filler words.
+3. If still unclear after asking to repeat, mention network difficulty and suggest a later call.
+4. Never invent missing content.
 
 ---
 

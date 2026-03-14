@@ -124,7 +124,7 @@ Gemini responds
 
 Transcript handling during the loop:
 
-- customer transcript is buffered and flushed after 1.2 seconds of silence,
+- customer transcript is buffered and flushed rapidly (after ~400ms of speech pause) to reduce frontend latency,
 - agent transcript is buffered until `turnComplete`,
 - both are broadcast through `/ui-sync`,
 - `App.tsx` filters events by `callId` before rendering.

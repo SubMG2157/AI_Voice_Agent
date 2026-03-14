@@ -245,8 +245,8 @@ The main runtime depends more on prompt instructions than on deterministic busin
 | `PLIVO_AUTH_TOKEN` | phone mode, SMS | Required for real Plivo operations |
 | `PLIVO_NUMBER` | phone mode, SMS | Outbound caller ID and SMS sender |
 | `GEMINI_API_KEY` | Plivo media bridge | Primary backend AI key |
-| `BACKEND_BASE_URL` | Plivo webhook URLs | Must be public for Plivo, usually ngrok |
-| `BACKEND_PORT` | Express server | Defaults to `3001` |
+| `BACKEND_BASE_URL` | Plivo webhook URLs | Must be public for Plivo, usually Railway public URL or ngrok |
+| `PORT` | Express server | Typical Railway port environment variable. Falls back to `BACKEND_PORT` or `3001` |
 | `DLT_ENTITY_ID` | Plivo SMS (India) | Optional DLT entity for India compliance |
 | `DLT_TEMPLATE_ID` | Plivo SMS (India) | Optional DLT template for India compliance |
 
