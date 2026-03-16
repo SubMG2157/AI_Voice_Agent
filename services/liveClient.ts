@@ -154,13 +154,19 @@ export class LiveClient {
 
       // CRITICAL: Force agent to speak first immediately — do not wait for customer audio
       try {
-        this.session.sendClientContent?.({
+        const payload = {
           turns: [{
             role: 'user',
             parts: [{ text: 'कॉल कनेक्ट झाला आहे. आता तुझं मराठी ग्रीटिंग लगेच सांग. ग्राहकाची वाट पाहू नको.' }]
           }],
           turnComplete: true,
-        });
+        };
+        
+        if (typeof this.session.sendClientContent === 'function') {
+          this.session.sendClientContent(payload);
+        } else if (typeof this.session.send === 'function') {
+          this.session.send({ clientContent: payload });
+        }
         log('Greeting trigger sent — agent should speak first immediately');
       } catch (triggerErr: any) {
         console.warn('sendClientContent trigger failed:', triggerErr?.message);
@@ -187,19 +193,26 @@ export class LiveClient {
     this.processor.onaudioprocess = (e) => {
       if (!this.allowSendAudio || !this.session) return;
       const inputData = e.inputBuffer.getChannelData(0);
-      // Check if significant audio is being sent (peaks above noise floor)
+      
+      // We must NEVER drop silent frames. Gemini's VAD relies on the continuous stream 
+      // of audio (including silence) to trigger the `endOfSpeech` event accurately!
+      
+      // Check if significant audio is being sent for timeout resetting purposes
       const peak = Math.max(...Array.from(inputData).map(Math.abs));
-      
-      if (peak < 0.01) return; // Skip silent frames entirely
-      
-      if (!this.customerAudioSent) {
-        this.customerAudioSent = true;
-        // Start response timeout when customer first sends audio
-        this.startResponseTimeout();
+      if (peak >= 0.01) {
+        if (!this.customerAudioSent) {
+          this.customerAudioSent = true;
+          this.startResponseTimeout();
+        }
       }
       
       const pcmBlob = createPcmBlob(inputData);
-      this.session.sendRealtimeInput({ media: pcmBlob });
+      
+      if (typeof this.session.sendRealtimeInput === 'function') {
+        this.session.sendRealtimeInput({ media: pcmBlob });
+      } else if (typeof this.session.send === 'function') {
+        this.session.send({ realtimeInput: { mediaChunks: [pcmBlob] } });
+      }
     };
 
     this.inputSource.connect(this.processor);
