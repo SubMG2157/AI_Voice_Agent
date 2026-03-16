@@ -45,6 +45,7 @@ export class LiveClient {
   private customerAudioSent = false;
   private lastAgentResponseTime = 0;
   private activeAudioNodes: AudioBufferSourceNode[] = [];
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: LiveClientConfig) {
     this.config = config;
@@ -195,11 +196,16 @@ export class LiveClient {
       const inputData = e.inputBuffer.getChannelData(0);
       
       // We must NEVER drop silent frames. Gemini's VAD relies on the continuous stream 
-      // of audio (including silence) to trigger the `endOfSpeech` event accurately!
+      // of audio (including silence) to trigger the `endOfSpeech` event accurately.
+      // However, we apply a noise gate (fill with 0) below a threshold so background 
+      // mic noise doesn't incorrectly trigger the 'interrupted' event!
       
-      // Check if significant audio is being sent for timeout resetting purposes
       const peak = Math.max(...Array.from(inputData).map(Math.abs));
-      if (peak >= 0.01) {
+      
+      // Noise gate threshold: 0.03 is roughly -30dBFS, safe for speaking but blocks fan noise
+      if (peak < 0.03) {
+        inputData.fill(0);
+      } else {
         if (!this.customerAudioSent) {
           this.customerAudioSent = true;
           this.startResponseTimeout();
@@ -237,10 +243,11 @@ export class LiveClient {
   }
 
   private async handleMessage(message: LiveServerMessage) {
-    // First agent turn: enable customer audio so agent has spoken first
     if (message.serverContent?.modelTurn && !this.firstAgentTurnReceived) {
       this.firstAgentTurnReceived = true;
       this.allowSendAudio = true;
+      // Reset audio clock so greeting starts cleanly
+      this.nextStartTime = this.outputAudioContext?.currentTime ?? 0;
       if (this.outboundGuardTimer) {
         clearTimeout(this.outboundGuardTimer);
         this.outboundGuardTimer = null;
@@ -266,6 +273,10 @@ export class LiveClient {
     // Handle Audio Output
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.outputAudioContext && this.outputNode) {
+      // Ensure context is running (can get suspended on mobile/some browsers)
+      if (this.outputAudioContext.state === 'suspended') {
+        await this.outputAudioContext.resume();
+      }
       this.nextStartTime = Math.max(this.nextStartTime, this.outputAudioContext.currentTime);
 
       const audioBuffer = await decodeAudioData(
@@ -296,14 +307,45 @@ export class LiveClient {
     const inText = message.serverContent?.inputTranscription?.text;
     const turnComplete = !!message.serverContent?.turnComplete;
 
-    if (inText) this.customerBuffer += inText;
+    if (inText) {
+      this.customerBuffer += inText;
+      
+      // Clear previous flush timer
+      if (this.silenceTimer) clearTimeout(this.silenceTimer);
+      
+      // Flush customer transcript after 800ms of no new user text (matches telephony backend)
+      this.silenceTimer = setTimeout(() => {
+        if (this.customerBuffer.trim()) {
+          // Note: using the same telephony corrections to maintain consistency with backend
+          const custResult = sanitizeTranscript(this.customerBuffer.trim(), {
+            preferDevanagari: true,
+            dropIsolatedLatinWords: true,
+            dropUnclear: true,
+            applyTelephonyCorrections: true,
+          });
+          if (custResult.output) {
+            this.config.onTranscript(custResult.output, 'user', true);
+          }
+          this.customerBuffer = '';
+        }
+        this.silenceTimer = null;
+      }, 800);
+    }
+    
     if (outText) {
+      // If agent interrupts, flush any pending customer buffer immediately
       if (this.customerBuffer.trim()) {
-        const custResult = sanitizeTranscript(this.customerBuffer.trim());
+        const custResult = sanitizeTranscript(this.customerBuffer.trim(), {
+          preferDevanagari: true,
+          dropIsolatedLatinWords: true,
+          dropUnclear: true,
+          applyTelephonyCorrections: true,
+        });
         if (custResult.output) {
           this.config.onTranscript(custResult.output, 'user', true);
         }
         this.customerBuffer = '';
+        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
       }
       this.agentBuffer += outText;
     }
@@ -313,11 +355,17 @@ export class LiveClient {
         this.agentBuffer = '';
       }
       if (this.customerBuffer.trim()) {
-        const custFlush = sanitizeTranscript(this.customerBuffer.trim());
+        const custFlush = sanitizeTranscript(this.customerBuffer.trim(), {
+          preferDevanagari: true,
+          dropIsolatedLatinWords: true,
+          dropUnclear: true,
+          applyTelephonyCorrections: true,
+        });
         if (custFlush.output) {
           this.config.onTranscript(custFlush.output, 'user', true);
         }
         this.customerBuffer = '';
+        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
       }
     }
   }
@@ -359,10 +407,12 @@ export class LiveClient {
     if (this.volumeInterval) clearInterval(this.volumeInterval);
     if (this.outboundGuardTimer) clearTimeout(this.outboundGuardTimer);
     if (this.responseTimeoutTimer) clearTimeout(this.responseTimeoutTimer);
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
 
     this.allowSendAudio = false;
     this.outboundGuardTimer = null;
     this.responseTimeoutTimer = null;
+    this.silenceTimer = null;
     this.inputAudioContext = null;
     this.outputAudioContext = null;
     this.session = null;
