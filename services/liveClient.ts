@@ -202,8 +202,9 @@ export class LiveClient {
       
       const peak = Math.max(...Array.from(inputData).map(Math.abs));
       
-      // Noise gate threshold: 0.03 is roughly -30dBFS, safe for speaking but blocks fan noise
-      if (peak < 0.03) {
+      // Noise gate threshold: 0.1 prevents loud laptop speakers from echoing into the mic
+      // and falsely triggering an interruption during the agent's greeting.
+      if (peak < 0.1) {
         inputData.fill(0);
       } else {
         if (!this.customerAudioSent) {
@@ -245,14 +246,18 @@ export class LiveClient {
   private async handleMessage(message: LiveServerMessage) {
     if (message.serverContent?.modelTurn && !this.firstAgentTurnReceived) {
       this.firstAgentTurnReceived = true;
-      this.allowSendAudio = true;
       // Reset audio clock so greeting starts cleanly
       this.nextStartTime = this.outputAudioContext?.currentTime ?? 0;
       if (this.outboundGuardTimer) {
         clearTimeout(this.outboundGuardTimer);
         this.outboundGuardTimer = null;
       }
-      log('Outbound guard: agent spoke first — enabling customer audio');
+      // Delay mic enable by 600ms so the agent's greeting audio doesn't echo back
+      // into the mic and trigger a false interruption on hardware without good AEC
+      setTimeout(() => {
+        this.allowSendAudio = true;
+        log('Outbound guard: agent spoke first — enabling customer audio');
+      }, 600);
     }
 
     // Agent responded - reset response timeout
@@ -308,7 +313,10 @@ export class LiveClient {
     const turnComplete = !!message.serverContent?.turnComplete;
 
     if (inText) {
-      this.customerBuffer += inText;
+      // Join chunks with a space so words don't run together (e.g. "हो" + "बोलाना" → "हो बोलाना")
+      this.customerBuffer = this.customerBuffer
+        ? this.customerBuffer + ' ' + inText
+        : inText;
       
       // Clear previous flush timer
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
@@ -319,9 +327,9 @@ export class LiveClient {
         if (raw) {
           // Note: using the same telephony corrections to maintain consistency with backend
           const custResult = sanitizeTranscript(raw, {
-            preferDevanagari: true,
+            preferDevanagari: false,
             dropIsolatedLatinWords: true,
-            dropUnclear: true,
+            dropUnclear: false,
             applyTelephonyCorrections: true,
           });
           if (custResult.output) {
@@ -342,9 +350,9 @@ export class LiveClient {
         }
         const raw = this.customerBuffer.trim();
         const custResult = sanitizeTranscript(raw, {
-          preferDevanagari: true,
+          preferDevanagari: false,
           dropIsolatedLatinWords: true,
-          dropUnclear: true,
+          dropUnclear: false,
           applyTelephonyCorrections: true,
         });
         if (custResult.output) {
@@ -367,9 +375,9 @@ export class LiveClient {
         }
         const raw = this.customerBuffer.trim();
         const custFlush = sanitizeTranscript(raw, {
-          preferDevanagari: true,
+          preferDevanagari: false,
           dropIsolatedLatinWords: true,
-          dropUnclear: true,
+          dropUnclear: false,
           applyTelephonyCorrections: true,
         });
         if (custFlush.output) {
