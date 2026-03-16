@@ -146,7 +146,7 @@ export class LiveClient {
           },
           // Disable thinking for faster first token (model-dependent)
           thinkingConfig: { thinkingBudget: 0 },
-          temperature: 0.8,
+          temperature: 0.5,
         }
       });
 
@@ -185,21 +185,21 @@ export class LiveClient {
     this.processor = this.inputAudioContext.createScriptProcessor(2048, 1, 1);
 
     this.processor.onaudioprocess = (e) => {
-      if (!this.allowSendAudio) return;
+      if (!this.allowSendAudio || !this.session) return;
       const inputData = e.inputBuffer.getChannelData(0);
       // Check if significant audio is being sent (peaks above noise floor)
       const peak = Math.max(...Array.from(inputData).map(Math.abs));
-      if (peak > 0.01) { // Significant audio detected
-        if (!this.customerAudioSent) {
-          this.customerAudioSent = true;
-          // Start response timeout when customer first sends audio
-          this.startResponseTimeout();
-        }
+      
+      if (peak < 0.01) return; // Skip silent frames entirely
+      
+      if (!this.customerAudioSent) {
+        this.customerAudioSent = true;
+        // Start response timeout when customer first sends audio
+        this.startResponseTimeout();
       }
+      
       const pcmBlob = createPcmBlob(inputData);
-      sessionPromise.then((session) => {
-        session.sendRealtimeInput({ media: pcmBlob });
-      });
+      this.session.sendRealtimeInput({ media: pcmBlob });
     };
 
     this.inputSource.connect(this.processor);
