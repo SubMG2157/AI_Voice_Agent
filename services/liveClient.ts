@@ -315,9 +315,10 @@ export class LiveClient {
       
       // Flush customer transcript after 800ms of no new user text (matches telephony backend)
       this.silenceTimer = setTimeout(() => {
-        if (this.customerBuffer.trim()) {
+        const raw = this.customerBuffer.trim();
+        if (raw) {
           // Note: using the same telephony corrections to maintain consistency with backend
-          const custResult = sanitizeTranscript(this.customerBuffer.trim(), {
+          const custResult = sanitizeTranscript(raw, {
             preferDevanagari: true,
             dropIsolatedLatinWords: true,
             dropUnclear: true,
@@ -335,7 +336,12 @@ export class LiveClient {
     if (outText) {
       // If agent interrupts, flush any pending customer buffer immediately
       if (this.customerBuffer.trim()) {
-        const custResult = sanitizeTranscript(this.customerBuffer.trim(), {
+        if (this.silenceTimer) {
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = null;
+        }
+        const raw = this.customerBuffer.trim();
+        const custResult = sanitizeTranscript(raw, {
           preferDevanagari: true,
           dropIsolatedLatinWords: true,
           dropUnclear: true,
@@ -345,17 +351,22 @@ export class LiveClient {
           this.config.onTranscript(custResult.output, 'user', true);
         }
         this.customerBuffer = '';
-        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
       }
       this.agentBuffer += outText;
     }
+    
     if (turnComplete) {
       if (this.agentBuffer.trim()) {
         this.config.onTranscript(this.agentBuffer.trim(), 'model', true);
         this.agentBuffer = '';
       }
       if (this.customerBuffer.trim()) {
-        const custFlush = sanitizeTranscript(this.customerBuffer.trim(), {
+        if (this.silenceTimer) {
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = null;
+        }
+        const raw = this.customerBuffer.trim();
+        const custFlush = sanitizeTranscript(raw, {
           preferDevanagari: true,
           dropIsolatedLatinWords: true,
           dropUnclear: true,
@@ -365,7 +376,6 @@ export class LiveClient {
           this.config.onTranscript(custFlush.output, 'user', true);
         }
         this.customerBuffer = '';
-        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
       }
     }
   }
