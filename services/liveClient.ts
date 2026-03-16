@@ -44,6 +44,7 @@ export class LiveClient {
   private responseTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private customerAudioSent = false;
   private lastAgentResponseTime = 0;
+  private activeAudioNodes: AudioBufferSourceNode[] = [];
 
   constructor(config: LiveClientConfig) {
     this.config = config;
@@ -135,12 +136,12 @@ export class LiveClient {
             voiceConfig: { prebuiltVoiceConfig: { voiceName } }
           },
           systemInstruction: systemInstruction,
-          // Lower latency: end-of-speech after 300ms silence; high sensitivity = respond sooner
+          // Match Twilio backend settings: 500ms silence, low sensitivity
           realtimeInputConfig: {
             automaticActivityDetection: {
-              silenceDurationMs: 200,
+              silenceDurationMs: 500,
               prefixPaddingMs: 0,
-              endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+              endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
             },
           },
           // Disable thinking for faster first token (model-dependent)
@@ -244,6 +245,11 @@ export class LiveClient {
       this.customerAudioSent = false; // Reset for next turn
     }
 
+    if (message.serverContent?.interrupted) {
+      log('Agent interrupted by user');
+      this.stopAudioPlayback();
+    }
+
     // Handle Audio Output
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.outputAudioContext && this.outputNode) {
@@ -259,6 +265,15 @@ export class LiveClient {
       const source = this.outputAudioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.outputNode);
+      
+      this.activeAudioNodes.push(source);
+      source.onended = () => {
+        const idx = this.activeAudioNodes.indexOf(source);
+        if (idx !== -1) {
+          this.activeAudioNodes.splice(idx, 1);
+        }
+      };
+
       source.start(this.nextStartTime);
       this.nextStartTime += audioBuffer.duration;
     }
@@ -315,6 +330,8 @@ export class LiveClient {
       // Session cleanup
     }
 
+    this.stopAudioPlayback();
+
     if (this.inputSource) this.inputSource.disconnect();
     if (this.processor) this.processor.disconnect();
     if (this.outputNode) this.outputNode.disconnect();
@@ -337,5 +354,15 @@ export class LiveClient {
     this.outputAudioContext = null;
     this.session = null;
     this.nextStartTime = 0;
+  }
+
+  private stopAudioPlayback() {
+    this.activeAudioNodes.forEach(node => {
+      try { node.stop(); } catch (e) {}
+    });
+    this.activeAudioNodes = [];
+    if (this.outputAudioContext) {
+      this.nextStartTime = this.outputAudioContext.currentTime;
+    }
   }
 }
