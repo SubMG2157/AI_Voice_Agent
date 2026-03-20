@@ -18,7 +18,7 @@ import { isAgentClosingLine } from '../services/conversationEndDetector.js';
 import { sanitizeTranscript } from '../../services/transcriptSanitizer.js';
 import { sendOrderSms } from '../services/smsService.js';
 import { saveOrder } from '../orders/orderStore.js';
-import { findProduct, getProductPrice } from '../knowledge/productCatalog.js';
+import { findProduct, getProductPrice, productCatalog } from '../knowledge/productCatalog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -126,6 +126,79 @@ function isSmsLine(text: string): boolean {
     t.includes('पेमेंट लिंक') ||
     (t.includes('मोबाईल') && t.includes('पाठव'))
   );
+}
+
+const ORDER_UNITS_REGEX = /(पिशव(?:ी|्या|या|े)?|बॅग(?:ा)?|bag(?:s)?|पोते|सॅक)/i;
+const QUANTITY_WORDS: [RegExp, number][] = [
+  [/\b(एक|one)\b/i, 1],
+  [/\b(दोन|two)\b/i, 2],
+  [/\b(तीन|three)\b/i, 3],
+  [/\b(चार|four)\b/i, 4],
+  [/\b(पाच|five)\b/i, 5],
+  [/\b(सहा|six)\b/i, 6],
+  [/\b(सात|seven)\b/i, 7],
+  [/\b(आठ|eight)\b/i, 8],
+  [/\b(नऊ|nine)\b/i, 9],
+  [/\b(दहा|ten)\b/i, 10],
+];
+
+function normalizeIndicDigits(text: string): string {
+  const devToAscii: Record<string, string> = {
+    '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
+    '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
+  };
+  return text.replace(/[०-९]/g, (d) => devToAscii[d] ?? d);
+}
+
+function parseQuantityFromText(text: string): number | null {
+  const t = normalizeIndicDigits(text);
+  for (const [rx, val] of QUANTITY_WORDS) {
+    if (rx.test(t) && !/\bएकर\b/i.test(t)) return val;
+  }
+  const num = t.match(/\b(\d{1,3})\b/);
+  if (!num) return null;
+  const n = parseInt(num[1], 10);
+  if (Number.isNaN(n) || n <= 0 || n > 200) return null; // avoid pincode/phone noise
+  return n;
+}
+
+function cleanOrderProductText(text: string): string {
+  return normalizeIndicDigits(text)
+    .replace(/(\d{1,3}|एक|दोन|तीन|चार|पाच|सहा|सात|आठ|नऊ|दहा)\s*(पिशव(?:ी|्या|या|े)?|बॅग(?:ा)?|bag(?:s)?|पोते|सॅक).*/gi, '')
+    .replace(/\b(पिशव(?:ी|्या|या|े)?|बॅग(?:ा)?|bag(?:s)?|पोते|सॅक)\b.*/gi, '')
+    .replace(/^(ठीक|ठीक\s*आहे|बरोबर|हो|yes|okay|ok|confirm(?:ed)?|order)\b[:.\s-]*/gi, '')
+    .replace(/\b(AGENT|CUSTOMER)\s*:/gi, '')
+    .trim();
+}
+
+function resolveProductForChunk(
+  rawChunk: string,
+  preferredProduct: string | undefined,
+  existingProducts: string[]
+): string | null {
+  const cleaned = cleanOrderProductText(rawChunk);
+
+  // First try fuzzy canonicalization from cleaned chunk.
+  const canonical = cleaned ? findProduct(cleaned) : undefined;
+  if (canonical) return canonical.name;
+
+  // If cleaned chunk still has any known product alias/name token, resolve by catalog scan.
+  const normalizedChunk = normalizeIndicDigits(rawChunk).toLowerCase().replace(/\s+/g, '');
+  for (const p of productCatalog) {
+    const base = p.name.toLowerCase().replace(/\s+/g, '');
+    if (normalizedChunk.includes(base)) return p.name;
+    if (p.alias?.some((a) => normalizedChunk.includes(a.toLowerCase().replace(/\s+/g, '')))) {
+      return p.name;
+    }
+  }
+
+  // Numeric-only confirmations: use existing single product, else call context lastProduct.
+  if (existingProducts.length === 1) return existingProducts[0];
+  if (preferredProduct) {
+    const pref = findProduct(preferredProduct);
+    return pref ? pref.name : preferredProduct;
+  }
+  return null;
 }
 
 /** Strip spoken confirmation phrases from extracted text. */
@@ -497,63 +570,27 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
         state.agentBuffer = '';
         state.fullTranscript += '\nAGENT: ' + agentText;
 
-        // Helper to parse quantity
-        function parseQuantity(text: string): number | null {
-          if (text.match(/एक|one/i) && !text.match(/एकर/i)) return 1;
-          if (text.match(/दोन|two/i)) return 2;
-          if (text.match(/तीन|three/i)) return 3;
-          if (text.match(/चार|four/i)) return 4;
-          if (text.match(/पाच|five/i)) return 5;
-          const num = text.match(/(\d+)/);
-          return num ? parseInt(num[1]) : null;
-        }
-
-        // Real-time order tracking (FIX 2: Multi-product support)
-        // Only update if order is not locked (SMS not sent yet)
-        if (!state.locked && agentText.includes('पिशव्या')) {
-          // Use a loop to find ALL product mentions in the agent's definition
-          // e.g. "Nitrogen Booster दोन पिशव्या, NPK 19-19-19 तीन पिशव्या"
-          const productRegex = /(.*?)(?:\s*[-–]\s*|\s+)(\d+|एक|दोन|तीन|चार|पाच)\s*पिशव/g;
-
-          // Since regex in JS doesn't support overlapping matches nicely for the first part, 
-          // we split logic: match the pattern (Product)... (Quantity) पिशव्या
-
-          // Let's use a simpler approach: extract all chunks that look like products
-
-          // Regex to capture (Product Name) + (Quantity)
-          // Look for pattern: <words> <number> पिशव्या
-          // We iterate over the string finding matches
-
-          const pendingProducts: { name: string, qty: number }[] = [];
-
-          // Match 1: "Mahadhan Nitrogen Booster दोन पिशव्या"
-          // We can use the regex from before but in a global loop manually
-
-          // Better logic: Split by comma or 'आणि' (and) then parse each chunk
-          const chunks = agentText.split(/,|आणि|\+/);
+        // Real-time order tracking with broader unit support and numeric-only confirmations.
+        if (!state.locked && state.callSid) {
+          const chunks = agentText.split(/,|आणि|\+|;/).map((c: string) => c.trim()).filter(Boolean);
+          const existingProducts = Array.from((state.context?.items ?? new Map<string, number>()).keys());
+          const preferredProduct = state.context?.lastProduct;
+          let updatedCount = 0;
 
           for (const chunk of chunks) {
-            const qty = parseQuantity(chunk);
-            if (qty !== null && chunk.includes('पिशव')) {
-              // Extract product name from this chunk
-              // Remove quantity and 'पिशव्या'
-              let cleanName = chunk.replace(/(\d+|एक|दोन|तीन|चार|पाच)\s*पिशव.*/, '').trim();
-              cleanName = cleanName.replace(/^(ठीक|ठीक\s*\.|ठीक\s*आहे|बरोबर|हो|okay|ok)[.\s]*/gi, '').trim();
-              cleanName = cleanName.replace(/AGENT:|बरोबर|आहे|का|order|confirmed/gi, '').trim();
+            const qty = parseQuantityFromText(chunk);
+            const hasUnit = ORDER_UNITS_REGEX.test(chunk);
+            const isNumericOnlyConfirm = /^\s*(हो|yes|ok|okay|ठीक|बरोबर)?\s*(\d{1,2}|एक|दोन|तीन|चार|पाच|सहा|सात|आठ|नऊ|दहा)\s*$/i.test(normalizeIndicDigits(chunk));
+            if (qty === null || (!hasUnit && !isNumericOnlyConfirm)) continue;
 
-              if (cleanName.length > 2) {
-                pendingProducts.push({ name: cleanName, qty });
-              }
-            }
+            const resolved = resolveProductForChunk(chunk, preferredProduct, existingProducts);
+            if (!resolved) continue;
+            updateContextItems(state.callSid, resolved, qty);
+            updatedCount += 1;
           }
 
-          for (const item of pendingProducts) {
-            if (state.callSid) {
-              // FIX 3: Canonical name resolution
-              const canonical = findProduct(item.name);
-              const finalName = canonical ? canonical.name : item.name;
-              updateContextItems(state.callSid, finalName, item.qty);
-            }
+          if (updatedCount > 0) {
+            console.log(`[MediaStream] Real-time order extraction updated ${updatedCount} item(s)`);
           }
         }
 
@@ -644,6 +681,31 @@ export function handleMediaConnection(ws: import('ws').WebSocket, req: import('h
 
     // Safety: ensure we rely on the map in memory which updateContextItems modifies
     const sessionItems = ctx.items || new Map();
+
+    // Fallback extraction pass: if real-time extraction missed, recover from full transcript.
+    if (sessionItems.size === 0 && state.fullTranscript.trim()) {
+      const lines = state.fullTranscript
+        .split('\n')
+        .map((l) => l.replace(/^(AGENT|CUSTOMER):\s*/i, '').trim())
+        .filter(Boolean);
+      const preferredProduct = state.context?.lastProduct;
+      let recovered = 0;
+      for (const line of lines) {
+        const qty = parseQuantityFromText(line);
+        if (qty === null) continue;
+        const hasUnit = ORDER_UNITS_REGEX.test(line);
+        const isNumericOnlyConfirm = /^\s*(हो|yes|ok|okay|ठीक|बरोबर)?\s*(\d{1,2}|एक|दोन|तीन|चार|पाच|सहा|सात|आठ|नऊ|दहा)\s*$/i.test(normalizeIndicDigits(line));
+        if (!hasUnit && !isNumericOnlyConfirm) continue;
+        const existingProducts = Array.from(sessionItems.keys());
+        const resolved = resolveProductForChunk(line, preferredProduct, existingProducts);
+        if (!resolved) continue;
+        updateContextItems(state.callSid, resolved, qty);
+        recovered += 1;
+      }
+      if (recovered > 0) {
+        console.log(`[MediaStream] Recovered ${recovered} item(s) from transcript fallback`);
+      }
+    }
     
     // Only send if farmer actually ordered something during this call
     if (sessionItems.size === 0) {
